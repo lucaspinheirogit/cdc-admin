@@ -1,5 +1,8 @@
 import React, { Component } from 'react';
+import $ from 'jquery';
 import CustomInput from './components/CustomInput';
+import PubSub from 'pubsub-js';
+import TratadorErro from './TratadorErro';
 
 class FormularioAutor extends Component {
 
@@ -12,62 +15,45 @@ class FormularioAutor extends Component {
         }
     }
 
-    enviaForm(evt) {
-        evt.preventDefault();
+    enviaForm(evento) {
+        evento.preventDefault();
+        $.ajax({
+            url: 'https://cdc-react.herokuapp.com/api/autores',
+            contentType: 'application/json',
+            dataType: 'json',
+            type: 'post',
+            data: JSON.stringify({ nome: this.state.nome, email: this.state.email, senha: this.state.senha }),
+            success: () => {
 
-        fetch("https://cdc-react.herokuapp.com/api/autores", {
-            method: 'POST',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(
-                {
-                    nome: this.state.nome,
-                    email: this.state.email,
-                    senha: this.state.senha
-                }
-            )
-        })
-            .then(resposta => {
-                console.log(this.props.lista);
-                
                 var novaLista = [...this.props.lista, {
                     nome: this.state.nome,
                     email: this.state.email,
                 }];
 
-                console.log(novaLista);
-                
+                PubSub.publish('atualiza-lista-autores', novaLista);
 
-                this.props.CBAtualizaLista(novaLista);
                 this.setState({
                     nome: '',
                     email: '',
                     senha: ''
                 })
-            }).catch(error => {
-                console.log(error);
-            });
-
+            },
+            error: function (resposta) {
+                if (resposta.status === 400) {
+                    new TratadorErro().publicaErros(resposta.responseJSON);
+                }
+            },
+            beforeSend: function () {
+                PubSub.publish("limpa-erros", {});
+            }
+        });
     }
 
-    setNome(evt) {
-        this.setState({
-            nome: evt.target.value
-        })
-    }
-
-    setEmail(evt) {
-        this.setState({
-            email: evt.target.value
-        })
-    }
-
-    setSenha(evt) {
-        this.setState({
-            senha: evt.target.value
-        })
+    salvaAlteracao(nomeInput, evento) {
+        console.log(nomeInput);
+        console.log(evento);
+        
+        this.setState({ [nomeInput]: evento.target.value });
     }
 
     render() {
@@ -75,9 +61,9 @@ class FormularioAutor extends Component {
             <div className="pure-form pure-form-aligned">
                 <form className="pure-form pure-form-aligned" onSubmit={(evt) => this.enviaForm(evt)}>
 
-                    <CustomInput label="Nome" id="nome" type="text" name="nome" value={this.state.nome} onChange={(evt) => this.setNome(evt)} />
-                    <CustomInput label="Email" id="email" type="email" name="email" value={this.state.email} onChange={(evt) => this.setEmail(evt)} />
-                    <CustomInput label="Senha" id="senha" type="password" name="senha" value={this.state.senha} onChange={(evt) => this.setSenha(evt)} />
+                    <CustomInput label="Nome" id="nome" type="text" name="nome" value={this.state.nome} onChange={(evt) => this.salvaAlteracao(evt, 'nome')} />
+                    <CustomInput label="Email" id="email" type="email" name="email" value={this.state.email} onChange={(evt) => this.salvaAlteracao(evt, 'nome')} />
+                    <CustomInput label="Senha" id="senha" type="password" name="senha" value={this.state.senha} onChange={(evt) => this.salvaAlteracao(evt, 'nome')} />
 
                     <div className="pure-control-group">
                         <label></label>
@@ -122,7 +108,7 @@ class TabelaAutores extends Component {
 
 }
 
-export default class Autor extends Component {
+export default class AutorBox extends Component {
 
     constructor() {
         super();
@@ -139,20 +125,24 @@ export default class Autor extends Component {
                 this.setState({
                     lista: resposta
                 })
-            })
-    }
-
-    AtualizaLista(novaLista) {
-        this.setState({
-            lista: novaLista
-        });   
+            });
+        PubSub.subscribe('atualiza-lista-autores', (topico, novaLista) => {
+            this.setState({
+                lista: novaLista
+            });
+        })
     }
 
     render() {
         return (
             <div>
-                <FormularioAutor lista={this.state.lista} CBAtualizaLista={(novaLista) => this.AtualizaLista(novaLista)} />
-                <TabelaAutores lista={this.state.lista} />
+                <div className="header">
+                    <h1>Cadastro de Autores</h1>
+                </div>
+                <div>
+                    <FormularioAutor lista={this.state.lista} />
+                    <TabelaAutores lista={this.state.lista} />
+                </div>
             </div>
         )
     }
